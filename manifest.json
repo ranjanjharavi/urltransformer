@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "URL Transformer",
+  "version": "1.0",
+  "description": "Transform authenticated ReadMe redirect URLs.",
+  "permissions": ["activeTab", "clipboardWrite", "storage"],
+  "icons": {},
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "URL Transformer for ReadMe branded documentation sites",
+    "default_icon": {}
+  }
+}
