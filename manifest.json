@@ -4,10 +4,20 @@
   "version": "1.0",
   "description": "Transform authenticated ReadMe redirect URLs.",
   "permissions": ["activeTab", "clipboardWrite", "storage"],
-  "icons": {},
+  "icons": {
+    "16": "images/transformer-16.png",
+    "32": "images/transformer-32.png",
+    "48": "images/transformer-48.png",
+    "128": "images/transformer-128.png"
+  },
   "action": {
     "default_popup": "popup.html",
     "default_title": "URL Transformer for ReadMe branded documentation sites",
-    "default_icon": {}
+    "default_icon": {
+      "16": "images/transformer-16.png",
+      "32": "images/transformer-32.png",
+      "48": "images/transformer-48.png",
+      "128": "images/transformer-128.png"
+    }
   }
 }
