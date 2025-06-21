@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "URL Transformer",
   "version": "1.0",
-  "description": "Transform authenticated ReadMe redirect URLs.",
+  "description": "Build authenticated redirect URLs using saved JWT tokens.",
   "permissions": ["activeTab", "clipboardWrite", "storage"],
   "icons": {
     "16": "images/transformer-16.png",
@@ -12,7 +12,7 @@
   },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "URL Transformer for ReadMe branded documentation sites",
+    "default_title": "URL Transformer",
     "default_icon": {
       "16": "images/transformer-16.png",
       "32": "images/transformer-32.png",
