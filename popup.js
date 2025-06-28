@@ -1,134 +1,321 @@
-const TOKEN_STORAGE_KEY = 'transformerAuthToken';
-const TOKEN_LIBRARY_STORAGE_KEY = 'transformerTokenLibrary';
+import {
+  buildTransformedUrl,
+  getRuleSourceDefinition,
+  isHttpUrl,
+  normalizeStoredParameterRules,
+  removeParameterRule,
+  upsertParameterRule
+} from './src/parameter-rules.mjs';
+import {
+  createTokenRecord,
+  describeToken,
+  normalizeTokenLibrary
+} from './src/token-utils.mjs';
+import { copyText, createChromeApi } from './src/chrome-api.mjs';
+import { icons, sourceIcons } from './src/icons.mjs';
 
-const EYE_ICON_SVG = '<svg class="eye-icon" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M1.5 8C3 5 5.3 3.5 8 3.5S13 5 14.5 8C13 11 10.7 12.5 8 12.5S3 11 1.5 8Zm6.5 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm0-1.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Z"/></svg>';
-const EYE_OFF_ICON_SVG = '<svg class="eye-icon" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M1.5 8C3 5 5.3 3.5 8 3.5S13 5 14.5 8C13 11 10.7 12.5 8 12.5S3 11 1.5 8Zm6.5 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm0-1.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Z"/><rect fill="currentColor" x="7.3" y="1.5" width="1.4" height="13" rx="0.7" transform="rotate(40 8 8)"/></svg>';
+const STORAGE_KEYS = {
+  currentToken: 'transformerAuthToken',
+  tokenLibrary: 'transformerTokenLibrary',
+  parameterRules: 'transformerParameterRules'
+};
 
-let transformerResult = null;
-let tokenLibrary = [];
+const WORKSPACES = {
+  transform: ['transformWorkspaceTab', 'transformWorkspace'],
+  parameters: ['parametersWorkspaceTab', 'parametersWorkspace'],
+  tokens: ['tokensWorkspaceTab', 'tokensWorkspace']
+};
 
-document.addEventListener('DOMContentLoaded', () => {
-  bindEvents();
-  initialize().catch((error) => {
-    console.error(error);
-    showStatus('Could not load transformer state.', 'error');
-  });
+const UI_IDS = [
+  'transformUrlBtn', 'copyUrlBtn', 'openUrlBtn', 'manageSaveTokenBtn', 'manageTokensBtn',
+  'editParametersBtn', 'addParameterBtn', 'closeParameterEditorBtn', 'cancelParameterBtn',
+  'saveParameterBtn', 'parameterListContainer', 'sourceUrl', 'parameterName', 'parameterValue',
+  'manageAuthToken', 'toggleManagedTokenVisibility', 'parameterSummary', 'parameterEditor', 'parameterEditorTitle',
+  'customValueField', 'derivedValue', 'derivedValueText', 'selectedTokenTitle',
+  'selectedTokenMeta', 'tokenListContainer', 'tokenLibraryCount', 'transformedUrl',
+  'transformerResult', 'transformerStatus'
+];
+
+const ui = Object.fromEntries(UI_IDS.map((id) => [id, document.getElementById(id)]));
+const extensionApi = createChromeApi(chrome);
+const state = {
+  result: null,
+  currentToken: '',
+  tokenLibrary: [],
+  parameterRules: [],
+  editingParameterId: null
+};
+
+start().catch((error) => {
+  console.error(error);
+  showStatus('Could not load transformer state.', 'error');
 });
 
+async function start() {
+  bindEvents();
+  await loadState();
+  renderAll();
+  await fillCurrentUrl();
+}
+
 function bindEvents() {
-  document.getElementById('transformUrlBtn').addEventListener('click', transformUrl);
-  document.getElementById('copyUrlBtn').addEventListener('click', copyTransformedUrl);
-  document.getElementById('openUrlBtn').addEventListener('click', openTransformedUrl);
-  document.getElementById('saveTokenBtn').addEventListener('click', saveCurrentToken);
-  document.getElementById('toggleTokenVisibility').addEventListener('click', toggleTokenVisibility);
+  ui.transformUrlBtn.addEventListener('click', transformUrl);
+  ui.copyUrlBtn.addEventListener('click', copyTransformedUrl);
+  ui.openUrlBtn.addEventListener('click', openTransformedUrl);
+  ui.manageSaveTokenBtn.addEventListener('click', saveToken);
+  ui.toggleManagedTokenVisibility.addEventListener('click', toggleTokenVisibility);
+  ui.manageTokensBtn.addEventListener('click', () => setWorkspace('tokens'));
+  ui.editParametersBtn.addEventListener('click', () => setWorkspace('parameters'));
 
-  document.getElementById('sourceUrl').addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') transformUrl();
+  Object.entries(WORKSPACES).forEach(([workspace, [tabId]]) => {
+    document.getElementById(tabId).addEventListener('click', () => setWorkspace(workspace));
   });
 
-  document.getElementById('authToken').addEventListener('keydown', (event) => {
-    if (event.key === 'Enter') saveCurrentToken();
+  ui.addParameterBtn.addEventListener('click', () => openParameterEditor());
+  ui.closeParameterEditorBtn.addEventListener('click', closeParameterEditor);
+  ui.cancelParameterBtn.addEventListener('click', closeParameterEditor);
+  ui.saveParameterBtn.addEventListener('click', saveParameter);
+  ui.parameterListContainer.addEventListener('click', handleParameterListClick);
+
+  document.querySelectorAll('input[name="parameterSource"]').forEach((input) => {
+    input.addEventListener('change', renderParameterEditorSource);
   });
 
-  document.getElementById('authToken').addEventListener('input', (event) => {
-    const tokenValue = event.target.value;
-    renderTokenLibrary(tokenLibrary, tokenValue);
-    storageLocalSet({ [TOKEN_STORAGE_KEY]: tokenValue }).catch((error) => {
-      console.error(error);
-      showStatus('Could not save auth token.', 'error');
-    });
+  ui.sourceUrl.addEventListener('input', invalidateResult);
+  onEnter(ui.sourceUrl, transformUrl);
+  onEnter(ui.parameterName, saveParameter);
+  onEnter(ui.parameterValue, saveParameter);
+  onEnter(ui.manageAuthToken, saveToken);
+
+  ui.tokenListContainer.addEventListener('click', handleTokenListClick);
+  ui.tokenListContainer.addEventListener('change', handleTokenSelection);
+}
+
+async function loadState() {
+  const stored = await extensionApi.storage.get({
+    [STORAGE_KEYS.currentToken]: '',
+    [STORAGE_KEYS.tokenLibrary]: [],
+    [STORAGE_KEYS.parameterRules]: []
   });
+
+  state.currentToken = String(stored[STORAGE_KEYS.currentToken] || '').trim();
+  state.tokenLibrary = normalizeTokenLibrary(stored[STORAGE_KEYS.tokenLibrary]);
+  state.parameterRules = normalizeStoredParameterRules(stored[STORAGE_KEYS.parameterRules]);
 }
 
-async function initialize() {
-  const { [TOKEN_STORAGE_KEY]: authToken = '' } = await storageLocalGet({ [TOKEN_STORAGE_KEY]: '' });
-  const { [TOKEN_LIBRARY_STORAGE_KEY]: libraryData = [] } = await storageLocalGet({ [TOKEN_LIBRARY_STORAGE_KEY]: [] });
-
-  tokenLibrary = normalizeTokenLibrary(libraryData);
-  document.getElementById('authToken').value = authToken;
-  renderTokenLibrary(tokenLibrary, authToken);
-  await fillCurrentUrl(false);
+function renderAll() {
+  renderSelectedToken();
+  renderTokenLibrary();
+  renderParameterList();
+  renderParameterSummary();
 }
 
-function normalizeTokenLibrary(records) {
-  const seenTokens = new Set();
+function setWorkspace(workspace) {
+  Object.entries(WORKSPACES).forEach(([name, [tabId, panelId]]) => {
+    const isActive = name === workspace;
+    const tab = document.getElementById(tabId);
+    document.getElementById(panelId).hidden = !isActive;
+    tab.classList.toggle('is-active', isActive);
+    tab.setAttribute('aria-selected', String(isActive));
+  });
 
-  return (Array.isArray(records) ? records : [])
-    .map(normalizeTokenRecord)
-    .filter((record) => {
-      if (!record || seenTokens.has(record.token)) return false;
-      seenTokens.add(record.token);
-      return true;
-    });
+  document.getElementById(WORKSPACES[workspace][1]).scrollTop = 0;
+  if (workspace !== 'tokens') resetTokenVisibility();
 }
 
-function normalizeTokenRecord(record) {
-  const token = String(record?.token || '').trim();
-  if (!token) return null;
+function renderParameterList() {
+  if (!state.parameterRules.length) {
+    ui.parameterListContainer.innerHTML = '<div class="empty-state">No parameters configured. Add one to build the generated URL.</div>';
+    return;
+  }
 
-  return {
-    id: String(record?.id || createTokenId()),
-    token,
-    createdAt: Number(record?.createdAt) || Date.now()
+  ui.parameterListContainer.innerHTML = state.parameterRules.map((rule) => {
+    const source = getRuleSourceDefinition(rule.source);
+    const valueLabel = rule.source === 'literal'
+      ? (rule.value || 'Empty values are omitted')
+      : source.derivedLabel;
+
+    return `
+      <div class="parameter-row" data-rule-id="${escapeHtml(rule.id)}">
+        <span class="parameter-row-copy">
+          <span class="parameter-row-name">${escapeHtml(rule.key)}</span>
+          <span class="parameter-row-source">
+            ${sourceIcons[rule.source]}
+            <span>${escapeHtml(source.label)}</span>
+            <span aria-hidden="true">·</span>
+            <span class="parameter-row-value">${escapeHtml(valueLabel)}</span>
+            ${rule.required ? '<span class="parameter-required">Required</span>' : ''}
+          </span>
+        </span>
+        <span class="parameter-row-actions">
+          <button class="icon-btn" type="button" data-edit-rule="${escapeHtml(rule.id)}" aria-label="Edit ${escapeHtml(rule.key)}" title="Edit parameter">${icons.edit}</button>
+          ${rule.required ? '' : `<button class="icon-btn danger-icon-btn" type="button" data-delete-rule="${escapeHtml(rule.id)}" aria-label="Delete ${escapeHtml(rule.key)}" title="Delete parameter">${icons.delete}</button>`}
+        </span>
+      </div>
+    `;
+  }).join('');
+}
+
+function renderParameterSummary() {
+  const keys = state.parameterRules.map((rule) => rule.key.trim()).filter(Boolean);
+  const visibleKeys = keys.slice(0, 3);
+  const remainingCount = keys.length - visibleKeys.length;
+  ui.parameterSummary.textContent = `${visibleKeys.join(' · ') || 'No parameters'}${remainingCount > 0 ? ` · +${remainingCount}` : ''}`;
+}
+
+function handleParameterListClick(event) {
+  const editButton = event.target.closest('[data-edit-rule]');
+  if (editButton) {
+    openParameterEditor(editButton.dataset.editRule);
+    return;
+  }
+
+  const deleteButton = event.target.closest('[data-delete-rule]');
+  if (deleteButton) deleteParameter(deleteButton.dataset.deleteRule);
+}
+
+function openParameterEditor(ruleId = null) {
+  const rule = ruleId ? state.parameterRules.find((entry) => entry.id === ruleId) : null;
+  if (ruleId && !rule) return;
+
+  state.editingParameterId = rule?.id || null;
+  ui.parameterEditorTitle.textContent = rule ? 'Edit parameter' : 'Add parameter';
+  ui.parameterName.value = rule?.key || '';
+  ui.parameterValue.value = rule?.value || '';
+
+  const source = rule?.source || 'literal';
+  document.querySelectorAll('input[name="parameterSource"]').forEach((input) => {
+    input.checked = input.value === source;
+  });
+
+  ui.parameterListContainer.hidden = true;
+  ui.addParameterBtn.hidden = true;
+  ui.parameterEditor.hidden = false;
+  renderParameterEditorSource();
+  ui.parameterName.focus({ preventScroll: true });
+}
+
+function closeParameterEditor() {
+  state.editingParameterId = null;
+  ui.parameterEditor.hidden = true;
+  ui.parameterListContainer.hidden = false;
+  ui.addParameterBtn.hidden = false;
+  ui.parameterName.value = '';
+  ui.parameterValue.value = '';
+}
+
+function renderParameterEditorSource() {
+  const source = getSelectedEditorSource();
+  const definition = getRuleSourceDefinition(source);
+  const isCustom = source === 'literal';
+  ui.customValueField.hidden = !isCustom;
+  ui.derivedValue.hidden = isCustom;
+  ui.derivedValueText.textContent = isCustom ? '' : definition.description;
+}
+
+function getSelectedEditorSource() {
+  return document.querySelector('input[name="parameterSource"]:checked')?.value || 'literal';
+}
+
+async function saveParameter() {
+  const draft = {
+    key: ui.parameterName.value,
+    source: getSelectedEditorSource(),
+    value: ui.parameterValue.value
   };
-}
-
-function createTokenRecord(token) {
-  return { id: createTokenId(), token: String(token || '').trim(), createdAt: Date.now() };
-}
-
-function createTokenId() {
-  return globalThis.crypto?.randomUUID?.() || `token-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
-async function fillCurrentUrl(overwriteExisting = true) {
-  const sourceInput = document.getElementById('sourceUrl');
-  if (!overwriteExisting && sourceInput.value.trim()) return;
 
   try {
-    const tab = await getCurrentTab();
-    if (!tab?.url || !isHttpUrl(tab.url)) return;
-    sourceInput.value = tab.url;
+    state.parameterRules = upsertParameterRule(
+      state.parameterRules,
+      draft,
+      state.editingParameterId
+    );
+  } catch (error) {
+    showStatus(error.message, 'error');
+    ui.parameterName.focus();
+    return;
+  }
+
+  invalidateResult();
+  renderParameterList();
+  renderParameterSummary();
+  closeParameterEditor();
+  try {
+    await persistParameterRules();
+    showStatus('Parameter saved.', 'success');
+  } catch (error) {
+    handlePersistenceError(error, 'Could not save parameter changes.');
+  }
+}
+
+async function deleteParameter(ruleId) {
+  const rule = state.parameterRules.find((entry) => entry.id === ruleId);
+  if (!rule || rule.required || !globalThis.confirm(`Delete “${rule.key}”?`)) return;
+
+  state.parameterRules = removeParameterRule(state.parameterRules, ruleId);
+  if (state.editingParameterId === ruleId) closeParameterEditor();
+  invalidateResult();
+  renderParameterList();
+  renderParameterSummary();
+  try {
+    await persistParameterRules();
+    showStatus('Parameter removed.', 'success');
+  } catch (error) {
+    handlePersistenceError(error, 'Could not save parameter changes.');
+  }
+}
+
+function persistParameterRules() {
+  return extensionApi.storage.set({
+    [STORAGE_KEYS.parameterRules]: state.parameterRules
+  });
+}
+
+async function fillCurrentUrl(overwriteExisting = false) {
+  if (!overwriteExisting && ui.sourceUrl.value.trim()) return;
+
+  try {
+    const tab = await extensionApi.getCurrentTab();
+    if (tab?.url && isHttpUrl(tab.url)) ui.sourceUrl.value = tab.url;
   } catch (error) {
     console.error('Could not load active tab URL.', error);
   }
 }
 
 function transformUrl() {
-  const sourceValue = document.getElementById('sourceUrl').value.trim();
-  const authToken = document.getElementById('authToken').value.trim();
-
-  if (!sourceValue || !authToken) {
-    showStatus('Source URL and auth token are required.', 'error');
-    return;
-  }
-
   try {
-    const parsed = parseUserUrl(sourceValue);
-    const redirectPath = `${parsed.url.pathname || '/'}${parsed.url.search}${parsed.url.hash}` || '/';
-    const browserUrl = `${parsed.url.origin}/?auth_token=${encodeURIComponent(authToken)}&redirect=${encodeRedirectPath(redirectPath)}`;
-    const displayUrl = parsed.hadProtocol ? browserUrl : browserUrl.replace(/^https?:\/\//i, '');
-
-    transformerResult = { browserUrl, displayUrl };
-    setTransformerOutput(displayUrl);
-    toggleTransformerResult(true);
-    toggleTransformerActions(true);
+    state.result = buildTransformedUrl({
+      sourceValue: ui.sourceUrl.value,
+      token: state.currentToken,
+      rules: state.parameterRules
+    });
+    renderResult();
     showStatus('URL transformed.', 'success');
   } catch (error) {
-    transformerResult = null;
-    setTransformerOutput('');
-    toggleTransformerResult(false);
-    toggleTransformerActions(false);
-    showStatus('Enter a valid URL or hostname/path combination.', 'error');
+    console.error(error);
+    invalidateResult();
+    showStatus(error?.message || 'Could not transform this URL.', 'error');
   }
 }
 
+function renderResult() {
+  ui.transformedUrl.value = state.result?.displayUrl || '';
+  ui.transformerResult.classList.toggle('visible', Boolean(state.result));
+  ui.copyUrlBtn.disabled = !state.result;
+  ui.openUrlBtn.disabled = !state.result;
+}
+
+function invalidateResult() {
+  state.result = null;
+  renderResult();
+}
+
 async function copyTransformedUrl() {
-  if (!transformerResult) return;
+  if (!state.result) return;
 
   try {
-    await copyToClipboard(transformerResult.browserUrl);
-    showStatus('Transformed URL copied.', 'success');
+    await copyText(state.result.browserUrl);
+    showStatus('Generated URL copied.', 'success');
   } catch (error) {
     console.error(error);
     showStatus('Clipboard access failed.', 'error');
@@ -136,318 +323,220 @@ async function copyTransformedUrl() {
 }
 
 async function openTransformedUrl() {
-  if (!transformerResult) return;
+  if (!state.result) return;
 
   try {
-    if (!await isAllowedIncognitoAccess()) {
-      showStatus('Enable Allow in Incognito for this extension to open URLs there.', 'error');
-      return;
-    }
-
-    const existingIncognitoWindow = await getExistingIncognitoWindow();
-    if (existingIncognitoWindow?.id) {
-      await createTab({ windowId: existingIncognitoWindow.id, url: transformerResult.browserUrl, active: true });
-    } else {
-      await createWindow({ url: transformerResult.browserUrl, incognito: true, focused: true });
-    }
-
-    showStatus('Opened transformed URL in incognito.', 'success');
+    await extensionApi.openInIncognito(state.result.browserUrl);
+    showStatus('Opened generated URL in Incognito.', 'success');
   } catch (error) {
     console.error(error);
-    showStatus('Could not open the transformed URL in incognito.', 'error');
+    showStatus(error?.message || 'Could not open the generated URL in Incognito.', 'error');
   }
 }
 
-function renderTokenLibrary(tokens, activeToken) {
-  const container = document.getElementById('tokenListContainer');
-  const count = document.getElementById('tokenLibraryCount');
-  const normalizedActiveToken = String(activeToken || '').trim();
-  const tokenById = new Map(tokens.map((entry) => [entry.id, entry.token]));
+function renderSelectedToken() {
+  const activeRecord = state.tokenLibrary.find((entry) => entry.token === state.currentToken);
 
-  count.textContent = `${tokens.length} saved`;
-  if (!tokens.length) {
-    container.innerHTML = '<div class="token-empty">No saved tokens yet. Save one to reuse it quickly.</div>';
+  if (!state.currentToken) {
+    ui.selectedTokenTitle.textContent = 'No token selected';
+    ui.selectedTokenMeta.textContent = 'Choose a token before transforming.';
     return;
   }
 
-  container.innerHTML = tokens.map((entry, index) => {
-    const decoded = decodeJwtToken(entry.token);
-    const isActive = entry.token === normalizedActiveToken;
+  const index = activeRecord ? state.tokenLibrary.indexOf(activeRecord) : 0;
+  const token = describeToken(state.currentToken, index);
+  ui.selectedTokenTitle.textContent = token.title;
+
+  if (!token.isJwt) {
+    ui.selectedTokenMeta.textContent = activeRecord ? 'Saved token · Not a JWT' : 'Current token · Not saved';
+    return;
+  }
+
+  const expiry = token.expired ? 'Expired' : (token.expiryLabel !== 'None' ? `Expires ${token.expiryLabel}` : 'No expiration');
+  ui.selectedTokenMeta.textContent = activeRecord ? expiry : `${expiry} · Not saved`;
+}
+
+function renderTokenLibrary() {
+  ui.tokenLibraryCount.textContent = `${state.tokenLibrary.length} saved`;
+  if (!state.tokenLibrary.length) {
+    ui.tokenListContainer.innerHTML = '<div class="empty-state">No saved tokens yet. Add one above to select it for protected pages.</div>';
+    return;
+  }
+
+  ui.tokenListContainer.innerHTML = state.tokenLibrary.map((entry, index) => {
+    const token = describeToken(entry.token, index);
+    const isActive = entry.token === state.currentToken;
 
     return `
       <div class="token-item${isActive ? ' is-active' : ''}">
         <label class="token-choice">
-          <input class="token-radio select-token-radio" type="radio" name="selectedToken" data-id="${escapeHtml(entry.id)}"${isActive ? ' checked' : ''}>
+          <input class="token-radio" type="radio" name="selectedToken" data-select-token="${escapeHtml(entry.id)}"${isActive ? ' checked' : ''}>
           <span class="token-radio-mark" aria-hidden="true"></span>
           <span class="token-choice-copy">
-            <span class="token-choice-title">${escapeHtml(getTokenDisplayTitle(entry.token, decoded?.payload, index))}</span>
-            <span class="token-pill-row">${buildTokenStatePill(decoded?.payload)}${buildTokenDatePills(decoded?.payload)}</span>
+            <span class="token-choice-title">${escapeHtml(token.title)}</span>
+            <span class="token-pill-row">${renderTokenStatePill(token)}${renderTokenDatePills(token)}</span>
           </span>
         </label>
         <div class="token-actions">
-          <button class="small-btn token-copy-btn copy-token-btn" type="button" data-token-id="${escapeHtml(entry.id)}" aria-label="Copy token" title="Copy token"><svg class="token-icon" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M5.5 2A1.5 1.5 0 0 0 4 3.5v7A1.5 1.5 0 0 0 5.5 12h5A1.5 1.5 0 0 0 12 10.5v-7A1.5 1.5 0 0 0 10.5 2h-5ZM3 3.5A2.5 2.5 0 0 1 5.5 1h5A2.5 2.5 0 0 1 13 3.5v7a2.5 2.5 0 0 1-2.5 2.5h-5A2.5 2.5 0 0 1 3 10.5v-7Z"/><path fill="currentColor" d="M1 5.5A2.5 2.5 0 0 1 3.5 3H4v1h-.5A1.5 1.5 0 0 0 2 5.5v7A1.5 1.5 0 0 0 3.5 14h5A1.5 1.5 0 0 0 10 12.5V12h1v.5A2.5 2.5 0 0 1 8.5 15h-5A2.5 2.5 0 0 0 1 12.5v-7Z"/></svg></button>
-          <button class="small-btn token-delete-btn delete-token-btn" type="button" data-id="${escapeHtml(entry.id)}" aria-label="Delete saved token" title="Delete saved token"><svg class="token-icon" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6.25 2.5h3.5l.5 1H13a.75.75 0 0 1 0 1.5h-.6l-.55 7.14A1.5 1.5 0 0 1 10.35 13.5h-4.7a1.5 1.5 0 0 1-1.5-1.36L3.6 5H3a.75.75 0 0 1 0-1.5h2.75l.5-1Zm-.46 2.5.5 6.5h3.42l.5-6.5H5.79Z"/></svg></button>
+          <button class="icon-btn token-copy-btn" type="button" data-copy-token="${escapeHtml(entry.id)}" aria-label="Copy token" title="Copy token">${icons.copy}</button>
+          <button class="icon-btn danger-icon-btn" type="button" data-delete-token="${escapeHtml(entry.id)}" aria-label="Delete saved token" title="Delete saved token">${icons.delete}</button>
         </div>
       </div>
     `;
   }).join('');
-
-  container.querySelectorAll('.copy-token-btn').forEach((button) => {
-    button.addEventListener('click', async (event) => {
-      const tokenValue = tokenById.get(event.currentTarget.dataset.tokenId);
-      if (!tokenValue) return;
-
-      try {
-        await copyToClipboard(tokenValue);
-        event.currentTarget.classList.add('is-copied');
-        globalThis.setTimeout(() => event.currentTarget.classList.remove('is-copied'), 1800);
-        showStatus('Token copied to clipboard.', 'success');
-      } catch (error) {
-        console.error(error);
-        showStatus('Clipboard access failed.', 'error');
-      }
-    });
-  });
-
-  container.querySelectorAll('.select-token-radio').forEach((input) => {
-    input.addEventListener('change', (event) => selectStoredToken(event.currentTarget.dataset.id));
-  });
-
-  container.querySelectorAll('.delete-token-btn').forEach((button) => {
-    button.addEventListener('click', (event) => deleteStoredToken(event.currentTarget.dataset.id));
-  });
 }
 
-async function saveCurrentToken() {
-  const tokenInput = document.getElementById('authToken');
-  const tokenValue = String(tokenInput.value || '').trim();
-  if (!tokenValue) {
-    showStatus('Enter a token before saving it.', 'error');
+function renderTokenDatePills(token) {
+  return `<span class="token-date-pill"><strong>Issued</strong>${escapeHtml(token.issuedLabel)}</span><span class="token-date-pill${token.expired ? ' expired' : ''}"><strong>Expires</strong>${escapeHtml(token.expiryLabel)}</span>`;
+}
+
+function renderTokenStatePill(token) {
+  if (!token.isJwt) return '<span class="token-meta-pill invalid">Not a JWT</span>';
+  if (token.expired) return '<span class="token-meta-pill invalid">Expired JWT</span>';
+  return token.expiryWarning
+    ? `<span class="token-meta-pill warning">${escapeHtml(token.expiryWarning)}</span>`
+    : '';
+}
+
+async function handleTokenListClick(event) {
+  const copyButton = event.target.closest('[data-copy-token]');
+  if (copyButton) {
+    await copySavedToken(copyButton);
     return;
   }
 
-  const existingRecord = tokenLibrary.find((entry) => entry.token === tokenValue);
-  if (existingRecord) {
-    await selectStoredToken(existingRecord.id, 'Token already saved. Selected it.');
-    return;
-  }
-
-  tokenLibrary = [createTokenRecord(tokenValue), ...tokenLibrary];
-  renderTokenLibrary(tokenLibrary, tokenValue);
-
-  try {
-    await storageLocalSet({ [TOKEN_STORAGE_KEY]: tokenValue, [TOKEN_LIBRARY_STORAGE_KEY]: tokenLibrary });
-    showStatus('Token saved and selected.', 'success');
-  } catch (error) {
-    console.error(error);
-    showStatus('Could not save the token library.', 'error');
-  }
+  const deleteButton = event.target.closest('[data-delete-token]');
+  if (deleteButton) await deleteSavedToken(deleteButton.dataset.deleteToken);
 }
 
-async function selectStoredToken(tokenId, successMessage = 'Saved token selected.') {
-  const selectedRecord = tokenLibrary.find((entry) => entry.id === tokenId);
-  if (!selectedRecord) return;
-
-  document.getElementById('authToken').value = selectedRecord.token;
-  renderTokenLibrary(tokenLibrary, selectedRecord.token);
-
-  try {
-    await storageLocalSet({ [TOKEN_STORAGE_KEY]: selectedRecord.token });
-    showStatus(successMessage, 'success');
-  } catch (error) {
-    console.error(error);
-    showStatus('Could not select the saved token.', 'error');
-  }
-}
-
-async function deleteStoredToken(tokenId) {
-  const recordToDelete = tokenLibrary.find((entry) => entry.id === tokenId);
-  if (!recordToDelete) return;
-
-  tokenLibrary = tokenLibrary.filter((entry) => entry.id !== tokenId);
-  const tokenInput = document.getElementById('authToken');
-  const currentToken = String(tokenInput.value || '').trim();
-  const nextToken = recordToDelete.token === currentToken ? (tokenLibrary[0]?.token || '') : currentToken;
-
-  tokenInput.value = nextToken;
-  renderTokenLibrary(tokenLibrary, nextToken);
-
-  try {
-    await storageLocalSet({ [TOKEN_STORAGE_KEY]: nextToken, [TOKEN_LIBRARY_STORAGE_KEY]: tokenLibrary });
-    showStatus('Saved token removed.', 'success');
-  } catch (error) {
-    console.error(error);
-    showStatus('Could not remove the saved token.', 'error');
-  }
-}
-
-function buildTokenDatePills(payload) {
-  if (!payload) return '';
-
-  const issuedLabel = formatJwtTimeShort(payload.iat) || 'Unknown';
-  const expiryLabel = formatJwtTimeShort(payload.exp) || 'None';
-  return `<span class="token-date-pill"><strong>Issued</strong>${escapeHtml(issuedLabel)}</span><span class="token-date-pill${isJwtExpired(payload) ? ' expired' : ''}"><strong>Expires</strong>${escapeHtml(expiryLabel)}</span>`;
-}
-
-function buildTokenStatePill(payload) {
-  if (!payload) return '<span class="token-meta-pill invalid">Not a JWT</span>';
-  if (isJwtExpired(payload)) return '<span class="token-meta-pill invalid">Expired JWT</span>';
-
-  const warning = getJwtExpiryWarning(payload);
-  return warning ? `<span class="token-meta-pill warning">${escapeHtml(warning)}</span>` : '';
-}
-
-function getJwtExpiryWarning(payload) {
-  const exp = Number(payload?.exp);
-  if (!Number.isFinite(exp)) return null;
-
-  const deltaMs = exp * 1000 - Date.now();
-  const hourMs = 60 * 60 * 1000;
-  if (deltaMs <= 0 || deltaMs > 24 * hourMs) return null;
-  return deltaMs < hourMs ? `Expires in ${Math.max(1, Math.floor(deltaMs / 60000))}m` : `Expires in ${Math.floor(deltaMs / hourMs)}h`;
-}
-
-function decodeJwtToken(tokenValue) {
-  const parts = String(tokenValue || '').split('.');
-  if (parts.length < 2) return null;
-
-  try {
-    const header = JSON.parse(base64UrlDecode(parts[0]));
-    const payload = JSON.parse(base64UrlDecode(parts[1]));
-    return header && typeof header === 'object' && payload && typeof payload === 'object' ? { header, payload } : null;
-  } catch {
-    return null;
-  }
-}
-
-function base64UrlDecode(value) {
-  const normalized = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
-  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
-  const binary = globalThis.atob(padded);
-  const bytes = Uint8Array.from(binary, (character) => character.codePointAt(0) || 0);
-  return typeof TextDecoder === 'function' ? new TextDecoder().decode(bytes) : binary;
-}
-
-function getTokenDisplayTitle(tokenValue, payload, index) {
-  const email = [payload?.email, payload?.upn, payload?.preferred_username, payload?.unique_name]
-    .find((value) => typeof value === 'string' && value.trim());
-  if (email) return email;
-
-  const name = typeof payload?.name === 'string' ? payload.name.trim() : '';
-  return name || `Token ${index + 1} \u2022 ${getTokenFingerprint(tokenValue)}`;
-}
-
-function getTokenFingerprint(tokenValue) {
-  const normalized = String(tokenValue || '').trim();
-  return !normalized ? 'empty' : (normalized.length <= 8 ? normalized : `...${normalized.slice(-8)}`);
-}
-
-function formatJwtTimeShort(value) {
-  const seconds = Number(value);
-  if (!Number.isFinite(seconds)) return '';
-
-  const date = new Date(seconds * 1000);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleString([], { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-function isJwtExpired(payload) {
-  const exp = Number(payload?.exp);
-  return Number.isFinite(exp) && exp * 1000 <= Date.now();
-}
-
-function setTransformerOutput(value) {
-  document.getElementById('transformedUrl').value = value;
-}
-
-function toggleTransformerActions(enabled) {
-  document.getElementById('copyUrlBtn').disabled = !enabled;
-  document.getElementById('openUrlBtn').disabled = !enabled;
-}
-
-function toggleTransformerResult(visible) {
-  document.getElementById('transformerResult').classList.toggle('visible', visible);
+function handleTokenSelection(event) {
+  const input = event.target.closest('[data-select-token]');
+  if (input) selectSavedToken(input.dataset.selectToken);
 }
 
 function toggleTokenVisibility() {
-  const input = document.getElementById('authToken');
-  const button = document.getElementById('toggleTokenVisibility');
-  const willReveal = input.type === 'password';
-
-  input.type = willReveal ? 'text' : 'password';
-  button.setAttribute('aria-label', willReveal ? 'Hide token' : 'Show token');
-  button.setAttribute('title', willReveal ? 'Hide token' : 'Show token');
-  button.innerHTML = willReveal ? EYE_OFF_ICON_SVG : EYE_ICON_SVG;
+  const shouldReveal = ui.manageAuthToken.type === 'password';
+  ui.manageAuthToken.type = shouldReveal ? 'text' : 'password';
+  ui.toggleManagedTokenVisibility.innerHTML = shouldReveal ? icons.eyeOff : icons.eye;
+  ui.toggleManagedTokenVisibility.setAttribute('aria-label', shouldReveal ? 'Hide token' : 'Show token');
+  ui.toggleManagedTokenVisibility.title = shouldReveal ? 'Hide token' : 'Show token';
 }
 
-function parseUserUrl(value) {
-  const input = String(value || '').trim();
-  if (!input) throw new Error('Missing URL');
-
-  const hasExplicitScheme = /^[a-z][a-z\d+.-]*:\/\//i.test(input);
-  if (hasExplicitScheme && !isHttpUrl(input)) throw new Error('Unsupported URL scheme');
-
-  const hadProtocol = /^https?:\/\//i.test(input);
-  const candidate = hadProtocol ? input : `https://${input.replace(/^\/+/, '')}`;
-  if (!URL.canParse(candidate)) throw new Error('Unsupported URL');
-
-  const url = new URL(candidate);
-  if (!url.hostname || !isHttpUrl(url.href)) throw new Error('Unsupported URL');
-  return { url, hadProtocol };
+function resetTokenVisibility() {
+  ui.manageAuthToken.type = 'password';
+  ui.toggleManagedTokenVisibility.innerHTML = icons.eye;
+  ui.toggleManagedTokenVisibility.setAttribute('aria-label', 'Show token');
+  ui.toggleManagedTokenVisibility.title = 'Show token';
 }
 
-function isHttpUrl(value) {
-  return /^https?:\/\//i.test(String(value || ''));
+async function saveToken() {
+  const tokenValue = String(ui.manageAuthToken.value || '').trim();
+  if (!tokenValue) {
+    showStatus('Paste a token before saving it.', 'error');
+    ui.manageAuthToken.focus();
+    return;
+  }
+
+  const existingRecord = state.tokenLibrary.find((entry) => entry.token === tokenValue);
+  if (existingRecord) {
+    ui.manageAuthToken.value = '';
+    resetTokenVisibility();
+    await selectSavedToken(existingRecord.id, 'Token already saved and selected.');
+    return;
+  }
+
+  state.tokenLibrary = [createTokenRecord(tokenValue), ...state.tokenLibrary];
+  state.currentToken = tokenValue;
+  ui.manageAuthToken.value = '';
+  resetTokenVisibility();
+  invalidateResult();
+  renderSelectedToken();
+  renderTokenLibrary();
+
+  try {
+    await persistTokenState();
+    showStatus('Token saved and selected.', 'success');
+  } catch (error) {
+    handlePersistenceError(error, 'Could not save the token library.');
+  }
 }
 
-function encodeRedirectPath(value) {
-  return encodeURIComponent(value).replace(/%2F/g, '/');
+async function selectSavedToken(tokenId, successMessage = 'Token selected.') {
+  const selectedRecord = state.tokenLibrary.find((entry) => entry.id === tokenId);
+  if (!selectedRecord) return;
+
+  state.currentToken = selectedRecord.token;
+  invalidateResult();
+  renderSelectedToken();
+  renderTokenLibrary();
+
+  try {
+    await extensionApi.storage.set({ [STORAGE_KEYS.currentToken]: state.currentToken });
+    showStatus(successMessage, 'success');
+  } catch (error) {
+    handlePersistenceError(error, 'Could not select the saved token.');
+  }
+}
+
+async function deleteSavedToken(tokenId) {
+  const record = state.tokenLibrary.find((entry) => entry.id === tokenId);
+  if (!record || !globalThis.confirm('Delete this saved token?')) return;
+
+  state.tokenLibrary = state.tokenLibrary.filter((entry) => entry.id !== tokenId);
+  if (record.token === state.currentToken) state.currentToken = state.tokenLibrary[0]?.token || '';
+
+  invalidateResult();
+  renderSelectedToken();
+  renderTokenLibrary();
+
+  try {
+    await persistTokenState();
+    showStatus('Saved token removed.', 'success');
+  } catch (error) {
+    handlePersistenceError(error, 'Could not remove the saved token.');
+  }
+}
+
+async function copySavedToken(button) {
+  const record = state.tokenLibrary.find((entry) => entry.id === button.dataset.copyToken);
+  if (!record) return;
+
+  try {
+    await copyText(record.token);
+    button.classList.add('is-copied');
+    globalThis.setTimeout(() => button.classList.remove('is-copied'), 1800);
+    showStatus('Token copied.', 'success');
+  } catch (error) {
+    console.error(error);
+    showStatus('Clipboard access failed.', 'error');
+  }
+}
+
+function persistTokenState() {
+  return extensionApi.storage.set({
+    [STORAGE_KEYS.currentToken]: state.currentToken,
+    [STORAGE_KEYS.tokenLibrary]: state.tokenLibrary
+  });
+}
+
+function handlePersistenceError(error, message) {
+  console.error(error);
+  showStatus(message, 'error');
 }
 
 function showStatus(message, type) {
-  const element = document.getElementById('transformerStatus');
-  element.textContent = message;
-  element.className = `status-msg visible ${type}`;
-  globalThis.clearTimeout(element._statusTimer);
-  element._statusTimer = globalThis.setTimeout(() => { element.className = 'status-msg'; }, 2800);
+  ui.transformerStatus.textContent = message;
+  ui.transformerStatus.className = `status-msg visible ${type}`;
+  globalThis.clearTimeout(ui.transformerStatus._statusTimer);
+  ui.transformerStatus._statusTimer = globalThis.setTimeout(() => {
+    ui.transformerStatus.className = 'status-msg';
+  }, 2800);
 }
 
-async function copyToClipboard(text) {
-  const value = String(text);
-  const selection = globalThis.getSelection?.();
-  const activeElement = document.activeElement;
-  const textarea = document.createElement('textarea');
-  textarea.value = value;
-  textarea.setAttribute('readonly', '');
-  textarea.style.cssText = 'position:fixed;top:-9999px;left:-9999px;opacity:0';
-  document.body.appendChild(textarea);
-
-  try {
-    textarea.focus();
-    textarea.select();
-    textarea.setSelectionRange?.(0, value.length);
-
-    if (document.execCommand('copy')) {
-      return;
-    }
-  } catch (error) {
-    console.warn('document.execCommand("copy") failed. Falling back to Clipboard API.', error);
-  } finally {
-    textarea.remove();
-    selection?.removeAllRanges();
-    activeElement?.focus?.({ preventScroll: true });
-  }
-
-  if (navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(value);
-      return;
-    } catch (error) {
-      console.error('navigator.clipboard.writeText failed.', error);
-    }
-  }
-
-  throw new Error('No clipboard method succeeded.');
+function onEnter(element, action) {
+  element.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') action();
+  });
 }
 
 function escapeHtml(text) {
@@ -457,88 +546,4 @@ function escapeHtml(text) {
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
-}
-
-function storageLocalGet(query) {
-  return new Promise((resolve, reject) => {
-    chrome.storage.local.get(query, (result) => {
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
-        return;
-      }
-      resolve(result || {});
-    });
-  });
-}
-
-function storageLocalSet(value) {
-  return new Promise((resolve, reject) => {
-    chrome.storage.local.set(value, () => {
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
-        return;
-      }
-      resolve();
-    });
-  });
-}
-
-function getCurrentTab() {
-  return new Promise((resolve, reject) => {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
-        return;
-      }
-      resolve(tabs?.[0] || null);
-    });
-  });
-}
-
-function isAllowedIncognitoAccess() {
-  return new Promise((resolve, reject) => {
-    chrome.extension.isAllowedIncognitoAccess((isAllowed) => {
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
-        return;
-      }
-      resolve(Boolean(isAllowed));
-    });
-  });
-}
-
-function getExistingIncognitoWindow() {
-  return new Promise((resolve, reject) => {
-    chrome.windows.getAll({ populate: false, windowTypes: ['normal'] }, (windows) => {
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
-        return;
-      }
-      resolve((windows || []).find((windowInfo) => windowInfo?.incognito) || null);
-    });
-  });
-}
-
-function createTab(details) {
-  return new Promise((resolve, reject) => {
-    chrome.tabs.create(details, (tab) => {
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
-        return;
-      }
-      resolve(tab || null);
-    });
-  });
-}
-
-function createWindow(details) {
-  return new Promise((resolve, reject) => {
-    chrome.windows.create(details, (windowInfo) => {
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
-        return;
-      }
-      resolve(windowInfo || null);
-    });
-  });
 }

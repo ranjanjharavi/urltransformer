@@ -3,455 +3,164 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <style>
-    :root {
-      --foreground: #0b1220;
-      --muted-foreground: #475569;
-      --card-soft: #f5f9ff;
-      --border: #dbe7f5;
-      --border-strong: #bfd3ef;
-      --ring: rgba(59, 130, 246, 0.18);
-      --primary: #2563eb;
-      --primary-hover: #1d4ed8;
-      --success: #15803d;
-      --danger: #b91c1c;
-      --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.05);
-      --shadow-md: 0 26px 60px rgba(37, 99, 235, 0.12);
-      --radius-lg: 12px;
-      --radius-md: 10px;
-      --radius-sm: 8px;
-    }
-
-    * { box-sizing: border-box; }
-
-    body {
-      width: 480px;
-      margin: 0;
-      -webkit-font-smoothing: antialiased;
-      font-family: 'Inter', sans-serif;
-      color: var(--foreground);
-      background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
-    }
-
-    .shell { padding: 20px; }
-
-    h1, p { margin: 0; }
-
-    .panel {
-      position: relative;
-      overflow: hidden;
-      padding: 20px;
-      border: 1px solid rgba(191, 219, 254, 0.95);
-      border-radius: var(--radius-lg);
-      background: #fff;
-      box-shadow: var(--shadow-md);
-    }
-
-    .panel::before {
-      content: '';
-      position: absolute;
-      inset: 0 0 auto 0;
-      height: 56px;
-      background: linear-gradient(180deg, rgba(219, 234, 254, 0.42), rgba(219, 234, 254, 0));
-      pointer-events: none;
-    }
-
-    .panel-head {
-      position: relative;
-      z-index: 1;
-      margin-bottom: 18px;
-      padding-bottom: 14px;
-      border-bottom: 1px solid rgba(219, 234, 254, 0.9);
-    }
-
-    .panel-kicker {
-      margin-bottom: 6px;
-      color: #2563eb;
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-    }
-
-    .panel-title {
-      font-size: 19px;
-      line-height: 1.2;
-      letter-spacing: -0.02em;
-    }
-
-    .content-stack, .field { display: grid; gap: 8px; }
-
-    .content-stack {
-      position: relative;
-      z-index: 1;
-      gap: 16px;
-    }
-
-    label, .field-label {
-      color: #0f172a;
-      font-size: 12px;
-      font-weight: 600;
-    }
-
-    .helper-text {
-      color: var(--muted-foreground);
-      font-size: 12px;
-      line-height: 1.5;
-    }
-
-    .token-entry-row {
-      display: block;
-    }
-
-    .input-icon-wrapper {
-      position: relative;
-      display: grid;
-      height: 40px;
-    }
-
-    .input-icon-wrapper > input { padding-right: 38px; }
-
-    .input-eye-btn {
-      position: absolute;
-      top: 50%;
-      right: 8px;
-      display: inline-flex;
-      width: 26px;
-      height: 26px;
-      align-items: center;
-      justify-content: center;
-      padding: 0;
-      transform: translateY(-50%);
-      border: 0;
-      border-radius: var(--radius-sm);
-      background: transparent;
-      color: #94a3b8;
-      cursor: pointer;
-    }
-
-    .input-eye-btn:hover { color: #475569; }
-    .eye-icon, .token-icon { display: block; width: 14px; height: 14px; }
-
-    input, textarea, button { font: inherit; }
-
-    input, textarea {
-      width: 100%;
-      padding: 12px 13px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
-      color: var(--foreground);
-      box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.02);
-    }
-
-    input::placeholder, textarea::placeholder { color: #8ca0bc; }
-    input:hover, textarea:hover { border-color: var(--border-strong); }
-    input:focus, textarea:focus {
-      outline: none;
-      border-color: #93c5fd;
-      background: #ffffff;
-      box-shadow: 0 0 0 4px var(--ring);
-    }
-
-    textarea {
-      min-height: 96px;
-      resize: vertical;
-      line-height: 1.5;
-      background: linear-gradient(180deg, #fbfdff 0%, #f6faff 100%);
-    }
-
-    .action-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
-
-    .primary-actions {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      margin-top: 0;
-    }
-
-    .result-head,
-    .result-action-group {
-      display: flex;
-      align-items: center;
-    }
-
-    .result-head {
-      justify-content: space-between;
-      gap: 12px;
-    }
-
-    .result-action-group {
-      gap: 8px;
-    }
-
-    .primary-btn, .secondary-btn, .small-btn {
-      border-radius: var(--radius-sm);
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
-    }
-
-    .primary-btn, .secondary-btn { min-height: 40px; padding: 0 14px; }
-
-    .primary-btn {
-      border: 0;
-      background: linear-gradient(180deg, #3b82f6 0%, var(--primary) 100%);
-      color: #ffffff;
-      box-shadow: 0 12px 28px rgba(37, 99, 235, 0.22);
-    }
-
-    .primary-btn:hover {
-      background: linear-gradient(180deg, #2563eb 0%, var(--primary-hover) 100%);
-      transform: translateY(-1px);
-    }
-
-    .secondary-btn, .small-btn {
-      border: 1px solid rgba(191, 219, 254, 0.95);
-      background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-      color: var(--foreground);
-      box-shadow: var(--shadow-xs);
-    }
-
-    .secondary-btn:hover, .small-btn:hover {
-      border-color: var(--border-strong);
-      background: linear-gradient(180deg, #f9fbff 0%, #e3eeff 100%);
-      transform: translateY(-1px);
-    }
-
-    .small-btn { min-height: 34px; padding: 0 12px; }
-    button:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; transform: none; }
-
-    .token-copy-btn, .token-delete-btn {
-      display: inline-flex;
-      width: 30px;
-      min-height: 30px;
-      align-items: center;
-      justify-content: center;
-      padding: 0;
-      border-radius: 999px;
-    }
-
-    .token-save-btn {
-      display: inline-flex;
-      width: fit-content;
-      min-height: 34px;
-      align-items: center;
-      gap: 5px;
-      padding: 0 11px;
-      font-size: 12px;
-    }
-
-    .transform-btn {
-      min-height: 36px;
-      padding: 0 13px;
-      font-size: 12px;
-      box-shadow: 0 8px 18px rgba(37, 99, 235, 0.18);
-    }
-
-    .icon-action-btn {
-      display: inline-flex;
-      width: 42px;
-      min-height: 40px;
-      align-items: center;
-      justify-content: center;
-      padding: 0;
-      border-color: #bfdbfe;
-      border-radius: var(--radius-sm);
-      background: #eff6ff;
-      color: #1d4ed8;
-    }
-
-    .icon-action-btn:hover:not(:disabled) {
-      border-color: #60a5fa;
-      background: #dbeafe;
-      color: #1d4ed8;
-    }
-
-    .icon-action-btn:disabled {
-      opacity: 1;
-      border-color: #e2e8f0;
-      background: #f8fafc;
-      color: #94a3b8;
-    }
-
-    .action-icon {
-      width: 18px;
-      height: 18px;
-      fill: none;
-      stroke: currentColor;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-      stroke-width: 1.9;
-    }
-
-    .token-library-head, .token-actions {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-    }
-
-    .token-count-pill, .token-date-pill, .token-meta-pill {
-      display: inline-flex;
-      align-items: center;
-      min-height: 22px;
-      padding: 0 8px;
-      border: 1px solid #dbeafe;
-      border-radius: 999px;
-      background: #ffffff;
-      color: #475569;
-      font-size: 10px;
-      font-weight: 600;
-    }
-
-    .token-list { display: grid; gap: 8px; }
-
-    .token-item {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 8px;
-      align-items: start;
-      padding: 10px 12px;
-      border: 1px solid rgba(191, 219, 254, 0.9);
-      border-radius: var(--radius-md);
-      background: linear-gradient(180deg, #ffffff 0%, #f9fcff 100%);
-      box-shadow: var(--shadow-xs);
-    }
-
-    .token-item.is-active {
-      border-color: #93c5fd;
-      background: linear-gradient(180deg, #ffffff 0%, #f2f7ff 100%);
-      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.08);
-    }
-
-    .token-choice { display: flex; min-width: 0; gap: 10px; align-items: flex-start; cursor: pointer; }
-    .token-radio { position: absolute; opacity: 0; pointer-events: none; }
-
-    .token-radio-mark {
-      position: relative;
-      width: 16px;
-      height: 16px;
-      flex: 0 0 auto;
-      margin-top: 1px;
-      border: 1.5px solid #94a3b8;
-      border-radius: 999px;
-      background: #ffffff;
-    }
-
-    .token-radio-mark::after {
-      content: '';
-      position: absolute;
-      inset: 3px;
-      border-radius: 999px;
-      background: var(--primary);
-      transform: scale(0);
-    }
-
-    .token-item.is-active .token-radio-mark { border-color: var(--primary); }
-    .token-item.is-active .token-radio-mark::after { transform: scale(1); }
-    .token-choice-copy { display: grid; min-width: 0; gap: 6px; }
-
-    .token-choice-title {
-      overflow: hidden;
-      color: var(--foreground);
-      font-size: 12px;
-      font-weight: 600;
-      line-height: 1.4;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .token-pill-row { display: flex; flex-wrap: wrap; gap: 6px; }
-    .token-date-pill strong { margin-right: 4px; color: #64748b; font-size: 9px; letter-spacing: 0.04em; text-transform: uppercase; }
-    .token-date-pill.expired, .token-meta-pill.invalid { border-color: #fecaca; background: #fff5f5; color: #b91c1c; }
-    .token-meta-pill.warning { border-color: #fcd34d; background: #fffbeb; color: #92400e; }
-
-    .token-copy-btn { border-color: #bfdbfe; background: #eff6ff; color: #1e40af; }
-    .token-copy-btn:hover { border-color: #93c5fd; background: #dbeafe; }
-    .token-copy-btn.is-copied { border-color: #86efac; background: #f0fdf4; color: #15803d; }
-    .token-delete-btn { border-color: #fecaca; background: #fff1f2; color: #b91c1c; }
-    .token-delete-btn:hover { border-color: #fca5a5; background: #ffe4e6; }
-
-    .token-empty {
-      padding: 12px;
-      border: 1px dashed #dbeafe;
-      border-radius: var(--radius-md);
-      background: rgba(239, 246, 255, 0.55);
-      color: var(--muted-foreground);
-      font-size: 12px;
-      line-height: 1.5;
-      text-align: center;
-    }
-
-    .transformer-result { display: none; }
-    .transformer-result.visible { display: grid; }
-    .status-msg { display: none; color: transparent; font-size: 12px; line-height: 1.4; }
-    .status-msg.visible { display: block; }
-    .status-msg.visible.success { color: var(--success); }
-    .status-msg.visible.error { color: var(--danger); }
-  </style>
+  <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <div class="shell">
-    <main>
-      <article class="panel">
-        <div class="panel-head">
-          <p class="panel-kicker">URL transformer</p>
-          <h1 class="panel-title">Build Auth redirect URLs</h1>
+  <main class="app">
+    <section class="shell" aria-labelledby="appTitle">
+      <header class="app-header">
+        <span class="brand-mark" aria-hidden="true">
+          <svg class="stroke-icon" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"/><path d="M14 11a5 5 0 0 0-7.1-.1l-2 2A5 5 0 0 0 12 20l1.1-1.1"/></svg>
+        </span>
+        <div class="app-heading">
+          <h1 id="appTitle" class="app-title">URL Transformer</h1>
+          <p class="app-subtitle">Open protected pages with JWT authentication.</p>
         </div>
+      </header>
 
+      <nav class="workspace-tabs" role="tablist" aria-label="Workspace">
+        <button id="transformWorkspaceTab" class="workspace-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="transformWorkspace">Transform</button>
+        <button id="parametersWorkspaceTab" class="workspace-tab" type="button" role="tab" aria-selected="false" aria-controls="parametersWorkspace">Parameters</button>
+        <button id="tokensWorkspaceTab" class="workspace-tab" type="button" role="tab" aria-selected="false" aria-controls="tokensWorkspace">Tokens</button>
+      </nav>
+
+      <div id="transformerStatus" class="status-msg" aria-live="polite"></div>
+
+      <section id="transformWorkspace" class="workspace-view" role="tabpanel" aria-labelledby="transformWorkspaceTab">
         <div class="content-stack">
           <div class="field">
             <label for="sourceUrl">Source URL</label>
-            <input type="text" id="sourceUrl" placeholder="https://example.com/path or example.com/path" autocapitalize="off" autocorrect="off" spellcheck="false">
+            <input type="text" id="sourceUrl" placeholder="https://docs.example.com/path" autocapitalize="off" autocorrect="off" spellcheck="false">
           </div>
 
           <div class="field">
-            <label for="authToken">Auth token</label>
-            <div class="token-entry-row">
-              <div class="input-icon-wrapper">
-                <input type="password" id="authToken" placeholder="Stored locally on this browser" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
-                <button id="toggleTokenVisibility" class="input-eye-btn" type="button" aria-label="Show token" title="Show token"><svg class="eye-icon" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M1.5 8C3 5 5.3 3.5 8 3.5S13 5 14.5 8C13 11 10.7 12.5 8 12.5S3 11 1.5 8Zm6.5 3a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm0-1.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Z"/></svg></button>
-              </div>
+            <span class="field-label">JWT token</span>
+            <div class="selected-token">
+              <span class="selected-token-icon" aria-hidden="true">
+                <svg class="stroke-icon" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="3.5"/><path d="m10 13 8-8 2 2-2 2 1 1-2 2-1-1-4 4"/></svg>
+              </span>
+              <span class="selected-token-copy">
+                <span id="selectedTokenTitle" class="selected-token-title">No token selected</span>
+                <span id="selectedTokenMeta" class="selected-token-meta">Choose a token before transforming.</span>
+              </span>
+              <button id="manageTokensBtn" class="selected-token-action" type="button">Manage <svg class="stroke-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></button>
             </div>
-            <p class="helper-text">Paste a token, save it locally, and select a saved token below.</p>
           </div>
 
-          <div class="action-row primary-actions">
-            <button id="saveTokenBtn" class="small-btn token-save-btn" type="button">+ Save</button>
-            <button id="transformUrlBtn" class="primary-btn transform-btn" type="button">Transform</button>
-          </div>
+          <button id="editParametersBtn" class="parameter-summary" type="button">
+            <span class="parameter-summary-copy">
+              <span class="parameter-summary-label">URL parameters</span>
+              <span id="parameterSummary" class="parameter-summary-value">auth_token · redirect</span>
+            </span>
+            <span class="parameter-summary-action">Edit <svg class="stroke-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></span>
+          </button>
 
-          <div id="transformerResult" class="field transformer-result">
+          <button id="transformUrlBtn" class="primary-btn transform-btn" type="button">Transform URL</button>
+
+          <section id="transformerResult" class="transformer-result" aria-labelledby="resultLabel">
             <div class="result-head">
-              <label for="transformedUrl">Transformed URL</label>
+              <span id="resultLabel" class="field-label">Generated URL</span>
               <div class="result-action-group">
-              <button id="copyUrlBtn" class="secondary-btn icon-action-btn" type="button" aria-label="Copy transformed URL" title="Copy transformed URL" disabled><svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="8" width="10" height="12" rx="2"/><path d="M15 8V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h2"/></svg></button>
-              <button id="openUrlBtn" class="secondary-btn icon-action-btn" type="button" aria-label="Open transformed URL in Incognito" title="Open transformed URL in Incognito" disabled><svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v5"/><path d="m19 5-9 9"/><path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg></button>
+                <button id="copyUrlBtn" class="secondary-btn result-icon-btn" type="button" aria-label="Copy generated URL" title="Copy generated URL" disabled><svg class="stroke-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="8" width="10" height="12" rx="2"/><path d="M15 8V6a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h2"/></svg></button>
+                <button id="openUrlBtn" class="secondary-btn result-icon-btn" type="button" aria-label="Open generated URL in Incognito" title="Open generated URL in Incognito" disabled><svg class="stroke-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v5"/><path d="m19 5-9 9"/><path d="M19 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg></button>
               </div>
             </div>
-            <textarea id="transformedUrl" readonly placeholder="The transformed URL will appear here."></textarea>
+            <textarea id="transformedUrl" readonly placeholder="The generated URL will appear here."></textarea>
+            <p class="security-note"><svg class="stroke-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg><span>This link contains a JWT and may appear in browser history, logs, or referrer data.</span></p>
+          </section>
+        </div>
+      </section>
+
+      <section id="parametersWorkspace" class="workspace-view" role="tabpanel" aria-labelledby="parametersWorkspaceTab" hidden>
+        <div class="content-stack">
+          <div class="section-head">
+            <div>
+              <h2 class="section-title">URL parameters</h2>
+              <p class="section-description">Choose where each query parameter gets its value.</p>
+            </div>
+            <button id="addParameterBtn" class="small-btn button-with-icon" type="button"><svg class="stroke-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Add</button>
           </div>
 
-          <div id="transformerStatus" class="status-msg" aria-live="polite"></div>
+          <div id="parameterListContainer" class="parameter-list" aria-label="Configured URL parameters"></div>
+
+          <section id="parameterEditor" class="parameter-editor" aria-labelledby="parameterEditorTitle" hidden>
+            <div class="editor-head">
+              <h3 id="parameterEditorTitle" class="editor-title">Add parameter</h3>
+              <button id="closeParameterEditorBtn" class="icon-btn editor-close-btn" type="button" aria-label="Close parameter editor" title="Close"><svg class="stroke-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+            </div>
+
+            <div class="field">
+              <label for="parameterName">Parameter name</label>
+              <input id="parameterName" type="text" placeholder="e.g. environment" maxlength="120" autocomplete="off">
+            </div>
+
+            <fieldset class="source-selector">
+              <legend>Value source</legend>
+              <div class="source-options">
+                <label class="source-option">
+                  <input type="radio" name="parameterSource" value="selectedToken">
+                  <span class="source-option-content"><svg class="stroke-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="7.5" cy="15.5" r="3.5"/><path d="m10 13 8-8 2 2-2 2 1 1-2 2-1-1-4 4"/></svg>Token</span>
+                </label>
+                <label class="source-option">
+                  <input type="radio" name="parameterSource" value="sourcePath">
+                  <span class="source-option-content"><svg class="stroke-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h6a4 4 0 0 1 4 4v10"/><path d="m11 15 4 4 4-4"/></svg>Page path</span>
+                </label>
+                <label class="source-option">
+                  <input type="radio" name="parameterSource" value="literal" checked>
+                  <span class="source-option-content"><svg class="stroke-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7V5h16v2M9 19h6M12 5v14"/></svg>Custom</span>
+                </label>
+              </div>
+            </fieldset>
+
+            <div id="customValueField" class="field">
+              <label for="parameterValue">Custom value</label>
+              <input id="parameterValue" type="text" placeholder="Value" autocomplete="off">
+            </div>
+
+            <div id="derivedValue" class="derived-value" hidden>
+              <svg class="stroke-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+              <span id="derivedValueText"></span>
+            </div>
+
+            <div class="editor-actions">
+              <button id="cancelParameterBtn" class="secondary-btn" type="button">Cancel</button>
+              <button id="saveParameterBtn" class="primary-btn button-with-icon" type="button"><svg class="stroke-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>Save</button>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="tokensWorkspace" class="workspace-view" role="tabpanel" aria-labelledby="tokensWorkspaceTab" hidden>
+        <div class="content-stack">
+          <div>
+            <h2 class="section-title">Saved tokens</h2>
+            <p class="section-description">Add, inspect, and select a JWT for protected pages.</p>
+          </div>
+
+          <div class="manage-token-entry">
+            <label for="manageAuthToken">Add a JWT token</label>
+            <div class="manage-token-row">
+              <div class="token-input-wrapper">
+                <input type="password" id="manageAuthToken" placeholder="Paste JWT token" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+                <button id="toggleManagedTokenVisibility" class="token-visibility-btn" type="button" aria-label="Show token" title="Show token"><svg class="stroke-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+              </div>
+              <button id="manageSaveTokenBtn" class="secondary-btn button-with-icon" type="button"><svg class="stroke-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>Save</button>
+            </div>
+            <p class="helper-text">Tokens are stored only in this browser's extension storage.</p>
+          </div>
 
           <div class="field">
             <div class="token-library-head">
-              <span class="field-label">Saved tokens</span>
+              <span class="field-label">Token library</span>
               <span id="tokenLibraryCount" class="token-count-pill">0 saved</span>
             </div>
             <div id="tokenListContainer" class="token-list"></div>
           </div>
         </div>
-      </article>
-    </main>
-  </div>
+      </section>
+    </section>
+  </main>
 
-  <script src="popup.js"></script>
+  <script type="module" src="popup.js"></script>
 </body>
 </html>
