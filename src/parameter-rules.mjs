@@ -60,10 +60,11 @@ export function validateParameterDraft(rules, draft, editingId = null) {
 
   if (duplicate) throw new Error(`Parameter “${key}” already exists.`);
 
+  const source = RULE_SOURCES.has(draft.source) ? draft.source : 'literal';
   return {
     key,
-    source: RULE_SOURCES.has(draft.source) ? draft.source : 'literal',
-    value: draft.source === 'literal' ? String(draft.value ?? '') : ''
+    source,
+    value: source === 'literal' ? String(draft.value ?? '') : ''
   };
 }
 
