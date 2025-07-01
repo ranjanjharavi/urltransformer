@@ -82,9 +82,17 @@ function getTokenFingerprint(tokenValue) {
   return normalized.length <= 8 ? normalized : `...${normalized.slice(-8)}`;
 }
 
-function formatJwtTime(value) {
+function toNumericDate(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string' || !value.trim()) return null;
+
   const seconds = Number(value);
-  if (!Number.isFinite(seconds)) return '';
+  return Number.isFinite(seconds) ? seconds : null;
+}
+
+function formatJwtTime(value) {
+  const seconds = toNumericDate(value);
+  if (seconds === null) return '';
 
   const date = new Date(seconds * 1000);
   if (Number.isNaN(date.getTime())) return '';
@@ -92,13 +100,13 @@ function formatJwtTime(value) {
 }
 
 function isJwtExpired(payload) {
-  const exp = Number(payload?.exp);
-  return Number.isFinite(exp) && exp * 1000 <= Date.now();
+  const exp = toNumericDate(payload?.exp);
+  return exp !== null && exp * 1000 <= Date.now();
 }
 
 function getJwtExpiryWarning(payload) {
-  const exp = Number(payload?.exp);
-  if (!Number.isFinite(exp)) return null;
+  const exp = toNumericDate(payload?.exp);
+  if (exp === null) return null;
 
   const deltaMs = exp * 1000 - Date.now();
   const hourMs = 60 * 60 * 1000;
