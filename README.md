@@ -46,6 +46,16 @@ The popup uses small ES modules with separate responsibilities:
 - `src/chrome-api.mjs` isolates Chrome and clipboard APIs.
 - `src/icons.mjs` owns reusable UI icons.
 
+Run the domain tests with:
+
+```sh
+node --test tests/*.test.mjs
+```
+
+`tests/parameter-rules.test.mjs` covers rule normalization/migration, the editor
+validation rules, and URL composition; `tests/token-utils.test.mjs` covers the
+token library and JWT decoding. No dependencies are needed — the suite runs on
+the Node built-in test runner.
 
 ## Privacy and security
 
