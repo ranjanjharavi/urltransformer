@@ -1,0 +1,10 @@
+{
+  "name": "urltransformer",
+  "version": "1.0.0",
+  "description": "Chrome extension that builds authenticated redirect URLs using saved JWT tokens.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  }
+}

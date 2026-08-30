@@ -49,7 +49,7 @@ The popup uses small ES modules with separate responsibilities:
 Run the domain tests with:
 
 ```sh
-node --test tests/*.test.mjs
+npm test  # or: node --test tests/*.test.mjs
 ```
 
 `tests/parameter-rules.test.mjs` covers rule normalization/migration, the editor
