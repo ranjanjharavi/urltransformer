@@ -57,6 +57,21 @@ validation rules, and URL composition; `tests/token-utils.test.mjs` covers the
 token library and JWT decoding. No dependencies are needed — the suite runs on
 the Node built-in test runner.
 
+## Packaging
+
+Build a Chrome Web Store upload archive with:
+
+```sh
+npm run package  # or: ./scripts/package.sh
+```
+
+The script writes `dist/<name>-<manifest version>.zip`, taking the name and
+version straight from `manifest.json`. It packs only the runtime files —
+`manifest.json` at the archive root, the popup, `src/`, and the icon sizes —
+and leaves out tests, tooling, dotfiles, and the full-resolution
+`*-master.*` design sources. It fails loudly if a required file is missing, so
+bump the version in `manifest.json` before packaging a new upload.
+
 ## Privacy and security
 
 Saved tokens and parameter rules are stored locally through Chrome extension storage. Generated URLs include a JWT query parameter, so treat copied, shared, browser-history, referrer, and logged URLs as sensitive. Static parameter values are persisted locally; do not use them for secrets. Remove saved tokens when they are no longer needed.
