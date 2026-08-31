@@ -51,6 +51,36 @@ export function createChromeApi(chromeApi) {
   };
 }
 
+export function createStorageWriter(storage) {
+  const pending = new Map();
+  return (domain, snapshot) => {
+    const write = (pending.get(domain) || Promise.resolve())
+      .catch(() => {})
+      .then(() => storage.set(snapshot));
+    pending.set(domain, write);
+    return write;
+  };
+}
+
+export function createStoragePersistence(storage) {
+  const writeStorage = createStorageWriter(storage);
+  return async ({ domain, snapshot, defaults, isCurrent, restore }) => {
+    try {
+      await writeStorage(domain, snapshot);
+    } catch (error) {
+      if (isCurrent()) {
+        try {
+          const stored = await storage.get(defaults);
+          if (isCurrent()) restore(stored);
+        } catch (restoreError) {
+          console.error('Could not restore saved state.', restoreError);
+        }
+      }
+      throw error;
+    }
+  };
+}
+
 export async function copyText(text) {
   const value = String(text);
   const selection = globalThis.getSelection?.();
