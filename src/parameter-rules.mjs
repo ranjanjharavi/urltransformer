@@ -29,14 +29,16 @@ const DEFAULT_PARAMETER_RULES = [
     key: 'auth_token',
     source: 'selectedToken',
     value: '',
-    required: true
+    required: true,
+    enabled: true
   },
   {
     id: 'protected-page-path',
     key: 'redirect',
     source: 'sourcePath',
     value: '',
-    required: true
+    required: true,
+    enabled: true
   }
 ];
 
@@ -75,7 +77,8 @@ export function upsertParameterRule(rules, draft, editingId = null) {
     return [...rules, {
       id: createId('rule'),
       ...validated,
-      required: false
+      required: false,
+      enabled: true
     }];
   }
 
@@ -98,6 +101,8 @@ export function buildTransformedUrl({ sourceValue, token, rules }) {
   const context = { source, token };
 
   rules.forEach((rule) => {
+    if (rule.enabled === false) return;
+
     const key = validateParameterName(rule.key);
     const normalizedKey = normalizeName(key);
     if (parameterNames.has(normalizedKey)) {
@@ -161,7 +166,8 @@ function normalizeParameterRule(record) {
     key,
     source,
     value: source === 'literal' ? String(record.value ?? '') : '',
-    required: Boolean(record.required)
+    required: Boolean(record.required),
+    enabled: record.enabled !== false
   };
 }
 

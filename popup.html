@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>URL Transformer</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
@@ -22,6 +23,7 @@
         <button id="transformWorkspaceTab" class="workspace-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="transformWorkspace">Transform</button>
         <button id="parametersWorkspaceTab" class="workspace-tab" type="button" role="tab" aria-selected="false" aria-controls="parametersWorkspace">Parameters</button>
         <button id="tokensWorkspaceTab" class="workspace-tab" type="button" role="tab" aria-selected="false" aria-controls="tokensWorkspace">Tokens</button>
+        <button id="recentWorkspaceTab" class="workspace-tab" type="button" role="tab" aria-selected="false" aria-controls="recentWorkspace">Recent</button>
       </nav>
 
       <div id="transformerStatus" class="status-msg" aria-live="polite"></div>
@@ -66,7 +68,7 @@
               </div>
             </div>
             <textarea id="transformedUrl" readonly placeholder="The generated URL will appear here."></textarea>
-            <p class="security-note"><svg class="stroke-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg><span>This link contains a JWT and may appear in browser history, logs, or referrer data.</span></p>
+            <p class="security-note"><svg class="stroke-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg><span>Generated links can appear in browser history, logs, or referrer data.</span></p>
           </section>
         </div>
       </section>

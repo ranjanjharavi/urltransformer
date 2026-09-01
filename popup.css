@@ -103,7 +103,7 @@ textarea:focus-visible {
 
 .workspace-tabs {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 4px;
     margin: 4px 12px;
     padding: 4px;
@@ -323,13 +323,24 @@ textarea {
     background: var(--surface-subtle);
 }
 
+.parameter-row.is-paused { background: var(--control); }
+.parameter-row.is-paused .parameter-row-name { color: var(--muted); }
 .parameter-row-copy { display: grid; min-width: 0; gap: 3px; }
 .parameter-row-name { overflow: hidden; color: var(--secondary); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 11px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .parameter-row-source { display: flex; min-width: 0; align-items: center; gap: 5px; color: var(--muted); font-size: 10px; }
 .parameter-row-source svg { width: 13px; height: 13px; flex: 0 0 auto; }
 .parameter-row-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .parameter-required { color: var(--primary); font-size: 9px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.04em; }
-.parameter-row-actions { display: flex; flex: 0 0 auto; gap: 5px; }
+.parameter-paused { flex: 0 0 auto; color: var(--warning); font-size: 9px; font-weight: 650; text-transform: uppercase; }
+.parameter-row-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 5px; }
+
+.parameter-switch { position: relative; display: grid; width: 32px; height: 32px; flex: 0 0 auto; place-items: center; cursor: pointer; }
+.parameter-switch input { position: absolute; width: 100%; height: 100%; min-height: 0; margin: 0; padding: 0; opacity: 0; cursor: pointer; }
+.parameter-switch-track { width: 28px; height: 16px; border-radius: 999px; background: var(--border-strong); pointer-events: none; transition: background-color 140ms ease; }
+.parameter-switch-track::after { display: block; width: 12px; height: 12px; margin: 2px; border-radius: 50%; background: var(--surface); content: ''; transition: transform 140ms ease; }
+.parameter-switch input:checked + .parameter-switch-track { background: var(--primary); }
+.parameter-switch input:checked + .parameter-switch-track::after { transform: translateX(12px); }
+.parameter-switch input:focus-visible + .parameter-switch-track { outline: 3px solid var(--focus); outline-offset: 2px; }
 
 .empty-state {
     padding: 18px 12px;
