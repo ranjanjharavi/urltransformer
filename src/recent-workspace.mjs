@@ -95,7 +95,7 @@ export function createRecentWorkspace({ ui, state, extensionApi, persistWorkspac
   }
 
   async function clear() {
-    if (!state.recentUrls.length || !globalThis.confirm('Clear all recent links?')) return;
+    if (!state.recentUrls.length) return;
 
     state.recentUrls = [];
     render();

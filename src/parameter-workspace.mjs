@@ -179,7 +179,7 @@ export function createParameterWorkspace({ ui, state, persistWorkspace, storageK
 
   async function deleteParameter(ruleId) {
     const rule = state.parameterRules.find((entry) => entry.id === ruleId);
-    if (!rule || rule.required || !globalThis.confirm(`Delete “${rule.key}”?`)) return;
+    if (!rule || rule.required) return;
 
     state.parameterRules = removeParameterRule(state.parameterRules, ruleId);
     if (editingParameterId === ruleId) closeEditor();

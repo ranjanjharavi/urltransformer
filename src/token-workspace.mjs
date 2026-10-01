@@ -159,7 +159,7 @@ export function createTokenWorkspace({ ui, state, persistWorkspace, storageKeys,
 
   async function deleteSavedToken(tokenId) {
     const record = state.tokenLibrary.find((entry) => entry.id === tokenId);
-    if (!record || !globalThis.confirm('Delete this saved token?')) return;
+    if (!record) return;
 
     state.tokenLibrary = state.tokenLibrary.filter((entry) => entry.id !== tokenId);
     if (record.token === state.currentToken) state.currentToken = state.tokenLibrary[0]?.token || '';
